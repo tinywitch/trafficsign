@@ -113,7 +113,7 @@ class Vgg(object):
             optimizer = tf.train.AdamOptimizer(self.lrn_rate)
 
         apply_op = optimizer.apply_gradients(
-            zip(grads, trainable_variables),
+            list(zip(grads, trainable_variables)),
             global_step=self.global_step, name='train_step')
 
         train_ops = [apply_op] + self._extra_train_ops

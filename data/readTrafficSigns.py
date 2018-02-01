@@ -15,7 +15,7 @@
 import cv2
 import csv
 import numpy as np
-import image_process as impro
+from . import image_process as impro
 
 # function for reading the images
 # arguments: path to the traffic sign data, for example './GTSRB/Training'
@@ -31,11 +31,11 @@ def readTrafficSigns(rootpath, mode='test'):
     if mode == 'train':
         print('Reading Traffic Signs training images')
         for c in range(0, 43):
-            print '\t/> Read %d' % c
+            print('\t/> Read %d' % c)
             prefix = rootpath + '/' + format(c, '05d') + '/'  # subdirectory for class
             gtFile = open(prefix + 'GT-' + format(c, '05d') + '.csv')  # annotations file
             gtReader = csv.reader(gtFile, delimiter=';')  # csv parser for annotations file
-            gtReader.next()  # skip header
+            next(gtReader)  # skip header
             # loop over all images in current annotations file
             for row in gtReader:
                 image = cv2.imread(prefix + row[0])
@@ -56,22 +56,24 @@ def readTrafficSigns(rootpath, mode='test'):
             # labels.append(labels[-1])
     else:
         print('Reading Traffic Signs testing images')
-        rootpath = rootpath + '/'
-        gtFile = open(rootpath + 'GT-final_test.csv')  # annotations file
-        gtReader = csv.reader(gtFile, delimiter=';')  # csv parser for annotations file
-        gtReader.next()  # skip header
-        # loop over all images in current annotations file
-        for row in gtReader:
-            image = cv2.imread(rootpath + row[0])
-            image = impro.crop_square(image)
-            image = cv2.resize(image, (48, 48))
-            # image = impro.equalize_intensity(image)
-            images.append(image)  # the 1th column is the filename
-            label = row[7]
-            labels.append(label)  # the 8th column is the label
-        gtFile.close()
+        for c in range(0, 43):
+            print('\t/> Read %d' % c)
+            prefix = rootpath + '/' + format(c, '05d') + '/'  # subdirectory for class
+            gtFile = open(prefix + 'GT-' + format(c, '05d') + '.csv')  # annotations file
+            gtReader = csv.reader(gtFile, delimiter=';')  # csv parser for annotations file
+            next(gtReader)  # skip header
+            # loop over all images in current annotations file
+            for row in gtReader:
+                image = cv2.imread(prefix + row[0])
+                image = impro.crop_square(image)
+                image = cv2.resize(image, (48, 48))
+                # image = impro.equalize_intensity(image)
+                images.append(image)  # the 1th column is the filename
+                label = row[7]
+                labels.append(label)  # the 8th column is the label
+            gtFile.close()
 
     images = np.array(images, np.uint8)
     labels = np.array(labels, np.uint8)
-    print('Number images: ', images.shape[0])
+    print(('Number images: ', images.shape[0]))
     return images, labels

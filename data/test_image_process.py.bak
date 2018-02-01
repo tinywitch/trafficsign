@@ -1,5 +1,5 @@
 import cv2
-from . import image_process as impro
+import image_process as impro
 from matplotlib import pyplot as plt
 
 image_file = './Final_Test/Images/00163.ppm'

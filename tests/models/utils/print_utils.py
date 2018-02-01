@@ -8,7 +8,7 @@ def view_value(x):
 	# run the graph
 	with tf.Session() as sess:
 		sess.run(init_op)
-		print(sess.run(x))
+		print((sess.run(x)))
 
 # util function for converting tensor to numpy array
 def run_op(x):

@@ -1,4 +1,4 @@
-from . import readTrafficSigns
+import readTrafficSigns
 import numpy
 # from keras.preprocessing.image import ImageDataGenerator
 #

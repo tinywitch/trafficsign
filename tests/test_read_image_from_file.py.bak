@@ -11,7 +11,7 @@ labels = dataSets.train.labels
 image = images[0]
 label = labels[0]
 
-print(label)
+print label
 
 cv2.imshow('aaa', np.array(image))
 cv2.waitKey()

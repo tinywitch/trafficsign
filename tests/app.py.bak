@@ -1,5 +1,5 @@
 import tensorflow as tf
-from . import models
+import models
 import cv2
 import numpy as np
 import sys
@@ -55,7 +55,7 @@ def main(unuse_argv):
 
         label = sess.run(predictions)
 
-        print(label)
+        print label
         #
         # image = model.st_images[0].eval()
         #

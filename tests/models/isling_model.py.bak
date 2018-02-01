@@ -4,17 +4,15 @@ import numpy as np
 import tensorflow as tf
 
 from tensorflow.python.training import moving_averages
-from .spatial_transformer import transformer
-from .tf_utils import weight_variable, bias_variable, dense_to_one_hot
 
 slim = tf.contrib.slim
 
-IslingST_HParams = namedtuple('HParams',
-                              'batch_size, num_classes, min_lrn_rate, lrn_rate, '
-                              'optimizer, weight_decay_rate, dropout')
+Isling_HParams = namedtuple('HParams',
+                            'batch_size, num_classes, min_lrn_rate, lrn_rate, '
+                            'optimizer, weight_decay_rate, dropout')
 
 
-class IslingST(object):
+class Isling(object):
     def __init__(self, hps, images, labels, mode):
         """Vgg constructor.
     
@@ -46,50 +44,46 @@ class IslingST(object):
 
     def _build_model(self):
         """Build the core model within the graph."""
-        # with tf.variable_scope('ST_1'):
-        #     x = self._images
-        #     x = self._spatial_transformer('ST_1', x, 3, [200, 300, 30])
-
         with tf.variable_scope('conv_1_0'):
             x = self._images
-            x = self._conv_Bn_ReLU('conv_1_0', x, 3, 3, 64, self._stride_arr(1))
+            x = self._conv_ReLU('conv_1_0', x, 3, 3, 16, self._stride_arr(1))
         with tf.variable_scope('conv_1_1'):
-            x = self._conv_Bn_ReLU('conv_1_1', x, 1, 64, 32, self._stride_arr(1))
+            x = self._conv_ReLU('conv_1_1', x, 1, 16, 8, self._stride_arr(1))
         with tf.variable_scope('conv_1_2'):
-            x = self._conv_Bn_ReLU('conv_1_2', x, 3, 32, 32, self._stride_arr(1))
+            x = self._conv_ReLU('conv_1_2', x, 3, 8, 8, self._stride_arr(1))
         with tf.variable_scope('conv_1_3'):
-            x = self._conv_Bn_ReLU('conv_1_3', x, 1, 32, 64, self._stride_arr(1))
+            x = self._conv_ReLU('conv_1_3', x, 1, 8, 16, self._stride_arr(1))
         with tf.variable_scope('pool_1'):
             x = self._max_pool(x, 'pool_1')
 
-        # with tf.variable_scope('ST_2'):
-        #     x = self._spatial_transformer('ST_2', x, 64, [150, 150, 20])
-
+        with tf.variable_scope('conv_2_0'):
+            x = self._conv_ReLU('conv_2_0', x, 3, 16, 32, self._stride_arr(1))
         with tf.variable_scope('conv_2_1'):
-            x = self._conv_Bn_ReLU('conv_2_1', x, 1, 64, 64, self._stride_arr(1))
+            x = self._conv_ReLU('conv_2_1', x, 1, 32, 16, self._stride_arr(1))
         with tf.variable_scope('conv_2_2'):
-            x = self._conv_Bn_ReLU('conv_2_2', x, 3, 64, 64, self._stride_arr(1))
+            x = self._conv_ReLU('conv_2_2', x, 3, 16, 16, self._stride_arr(1))
         with tf.variable_scope('conv_2_3'):
-            x = self._conv_Bn_ReLU('conv_2_3', x, 1, 64, 128, self._stride_arr(1))
+            x = self._conv_ReLU('conv_2_3', x, 1, 16, 32, self._stride_arr(1))
         with tf.variable_scope('pool_2'):
             x = self._max_pool(x, 'pool_2')
 
+        with tf.variable_scope('conv_3_0'):
+            x = self._conv_ReLU('conv_3_0', x, 3, 32, 64, self._stride_arr(1))
         with tf.variable_scope('conv_3_1'):
-            x = self._conv_Bn_ReLU('conv_3_1', x, 1, 128, 128, self._stride_arr(1))
+            x = self._conv_ReLU('conv_3_1', x, 1, 64, 32, self._stride_arr(1))
         with tf.variable_scope('conv_3_2'):
-            x = self._conv_Bn_ReLU('conv_3_2', x, 3, 128, 128, self._stride_arr(1))
+            x = self._conv_ReLU('conv_3_2', x, 3, 32, 32, self._stride_arr(1))
         with tf.variable_scope('conv_3_3'):
-            x = self._conv_Bn_ReLU('conv_3_3', x, 1, 128, 256, self._stride_arr(1))
+            x = self._conv_ReLU('conv_3_3', x, 1, 32, 64, self._stride_arr(1))
         with tf.variable_scope('pool_3'):
             x = self._max_pool(x, 'pool_3')
 
         with tf.variable_scope('fc_1'):
-            x = self._fully_connected('fc_1', x, 512)
+            x = self._fully_connected('fc_1', x, 300)
             x = self._batch_norm2('fc_1', x)
             x = self._relu(x)
 
-        x = slim.dropout(x, self._dropout,
-                         is_training=(self.mode == 'train' and self._dropout > 0),
+        x = slim.dropout(x, self._dropout, is_training=(self.mode == 'train'),
                          scope='dropout1')
         # with tf.variable_scope('fc_2'):
         #     x = self._fully_connected('fc_2', x, 384)
@@ -125,29 +119,11 @@ class IslingST(object):
             optimizer = tf.train.AdamOptimizer(self.lrn_rate)
 
         apply_op = optimizer.apply_gradients(
-            list(zip(grads, trainable_variables)),
+            zip(grads, trainable_variables),
             global_step=self.global_step, name='train_step')
 
         train_ops = [apply_op] + self._extra_train_ops
         self.train_op = tf.group(*train_ops)
-
-    def _conv_Bn_ReLU(self, name, x, filter_size, in_filters, out_filters, strides):
-        """Convolution."""
-        with tf.variable_scope(name):
-            n = in_filters * in_filters * out_filters
-            kernel = tf.get_variable(
-                'DW', [filter_size, filter_size, in_filters, out_filters],
-                tf.float32, initializer=tf.random_normal_initializer(
-                    stddev=np.sqrt(2.0 / n)))
-            b = tf.get_variable('biases', [out_filters],
-                                initializer=tf.constant_initializer())
-            x = tf.nn.conv2d(x, kernel, strides, padding='SAME')
-            x = tf.nn.bias_add(x, b)
-            x = self._batch_norm(name, x)
-            tf.summary.histogram('pre_activations', x)
-            x = self._relu(x)
-            tf.summary.histogram('activations', x)
-            return x
 
     def _conv_ReLU(self, name, x, filter_size, in_filters, out_filters, strides):
         """Convolution."""
@@ -291,39 +267,3 @@ class IslingST(object):
                 # tf.summary.histogram(var.op.name, var)
 
         return tf.multiply(self.hps.weight_decay_rate, tf.add_n(costs))
-
-    def _spatial_transformer(self, name, x, in_filters, arr_out_filters):
-        width = x.get_shape().as_list()[1]
-        height = x.get_shape().as_list()[2]
-
-        with tf.variable_scope(name):
-            W_fc_loc1 = weight_variable([width * height * in_filters, arr_out_filters[2]])
-            b_fc_loc1 = bias_variable([arr_out_filters[2]])
-
-            W_fc_loc2 = weight_variable([arr_out_filters[2], 6])
-            # Use identity transformation as starting point
-            initial = np.array([[1., 0, 0], [0, 1., 0]])
-            initial = initial.astype('float32')
-            initial = initial.flatten()
-            b_fc_loc2 = tf.Variable(initial_value=initial, name='b_fc_loc2')
-
-            x_reshape = tf.reshape(x, [self.hps.batch_size, -1])
-            # %% Define the two layer localisation network
-            h_fc_loc1 = tf.nn.tanh(tf.matmul(x_reshape, W_fc_loc1) + b_fc_loc1)
-            h_fc_loc1 = self._batch_norm2(name, h_fc_loc1)
-            h_fc_loc1 = self._relu(h_fc_loc1)
-
-            h_fc_loc1 = slim.dropout(h_fc_loc1, self._dropout,
-                                     is_training=(self.mode == 'train'
-                                                  and self._dropout
-                                                  and self._dropout > 0),
-                                     scope='dropout')
-
-            h_fc_loc2 = tf.nn.tanh(tf.matmul(h_fc_loc1, W_fc_loc2) + b_fc_loc2)
-
-            # %% We'll create a spatial transformer module to identify discriminative
-            # %% patches
-            out_size = (width, height)
-            h_trans = transformer(x, h_fc_loc2, out_size)
-            h_trans = tf.reshape(h_trans, [self.hps.batch_size, width, height, in_filters])
-        return h_trans

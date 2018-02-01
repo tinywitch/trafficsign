@@ -4,9 +4,9 @@ from collections import namedtuple
 # import tensorflow as tf
 
 from tensorflow.python.training import moving_averages
-from spatial_transformer import transformer
-from utils.layer_utils import *
-from tf_utils import weight_variable, bias_variable
+from .spatial_transformer import transformer
+from .utils.layer_utils import *
+from .tf_utils import weight_variable, bias_variable
 
 slim = tf.contrib.slim
 
@@ -127,7 +127,7 @@ class Islingv2(object):
             optimizer = tf.train.AdamOptimizer(self.lrn_rate)
 
         apply_op = optimizer.apply_gradients(
-            zip(grads, trainable_variables),
+            list(zip(grads, trainable_variables)),
             global_step=self.global_step, name='train_step')
 
         train_ops = [apply_op] + self._extra_train_ops

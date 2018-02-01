@@ -4,20 +4,20 @@ import numpy as np
 import tensorflow as tf
 
 from tensorflow.python.training import moving_averages
-from .spatial_transformer import transformer
-from .tf_utils import weight_variable, bias_variable, dense_to_one_hot
+from spatial_transformer import transformer
+from tf_utils import weight_variable, bias_variable, dense_to_one_hot
 
 slim = tf.contrib.slim
 
-IslingST_HParams = namedtuple('HParams',
-                              'batch_size, num_classes, min_lrn_rate, lrn_rate, '
-                              'optimizer, weight_decay_rate, dropout')
+Isling_HParams = namedtuple('HParams',
+                            'batch_size, num_classes, min_lrn_rate, lrn_rate, '
+                            'optimizer, weight_decay_rate, dropout')
 
 
-class IslingST(object):
+class Isling(object):
     def __init__(self, hps, images, labels, mode):
-        """Vgg constructor.
-    
+        """Isling constructor.
+
         Args:
           hps: Hyperparameters.
           images: Batches of images. [batch_size, image_size, image_size, 3]
@@ -46,57 +46,36 @@ class IslingST(object):
 
     def _build_model(self):
         """Build the core model within the graph."""
-        # with tf.variable_scope('ST_1'):
-        #     x = self._images
-        #     x = self._spatial_transformer('ST_1', x, 3, [200, 300, 30])
-
-        with tf.variable_scope('conv_1_0'):
+        with tf.variable_scope('init'):
             x = self._images
-            x = self._conv_Bn_ReLU('conv_1_0', x, 3, 3, 64, self._stride_arr(1))
-        with tf.variable_scope('conv_1_1'):
-            x = self._conv_Bn_ReLU('conv_1_1', x, 1, 64, 32, self._stride_arr(1))
-        with tf.variable_scope('conv_1_2'):
-            x = self._conv_Bn_ReLU('conv_1_2', x, 3, 32, 32, self._stride_arr(1))
-        with tf.variable_scope('conv_1_3'):
-            x = self._conv_Bn_ReLU('conv_1_3', x, 1, 32, 64, self._stride_arr(1))
-        with tf.variable_scope('pool_1'):
-            x = self._max_pool(x, 'pool_1')
+            x = self._conv('init_conv', x, 3, 3, 16, self._stride_arr(1))
 
-        # with tf.variable_scope('ST_2'):
-        #     x = self._spatial_transformer('ST_2', x, 64, [150, 150, 20])
+        with tf.variable_scope('conv_1'):
+            x = self._res(x, 16, 32, self._stride_arr(1), 'conv_1_0', True)
+            x = self._res(x, 32, 32, self._stride_arr(1), 'conv_1_1')
+            x = self._res(x, 32, 32, self._stride_arr(1), 'conv_1_2')
+            x = self._res(x, 32, 32, self._stride_arr(1), 'conv_1_3')
 
-        with tf.variable_scope('conv_2_1'):
-            x = self._conv_Bn_ReLU('conv_2_1', x, 1, 64, 64, self._stride_arr(1))
-        with tf.variable_scope('conv_2_2'):
-            x = self._conv_Bn_ReLU('conv_2_2', x, 3, 64, 64, self._stride_arr(1))
-        with tf.variable_scope('conv_2_3'):
-            x = self._conv_Bn_ReLU('conv_2_3', x, 1, 64, 128, self._stride_arr(1))
-        with tf.variable_scope('pool_2'):
-            x = self._max_pool(x, 'pool_2')
+        with tf.variable_scope('conv_2'):
+            x = self._res(x, 32, 64, self._stride_arr(2), 'conv_2_0')
+            x = self._res(x, 64, 64, self._stride_arr(1), 'conv_2_1')
+            x = self._res(x, 64, 64, self._stride_arr(1), 'conv_2_2')
+            x = self._res(x, 64, 64, self._stride_arr(1), 'conv_2_3')
 
-        with tf.variable_scope('conv_3_1'):
-            x = self._conv_Bn_ReLU('conv_3_1', x, 1, 128, 128, self._stride_arr(1))
-        with tf.variable_scope('conv_3_2'):
-            x = self._conv_Bn_ReLU('conv_3_2', x, 3, 128, 128, self._stride_arr(1))
-        with tf.variable_scope('conv_3_3'):
-            x = self._conv_Bn_ReLU('conv_3_3', x, 1, 128, 256, self._stride_arr(1))
-        with tf.variable_scope('pool_3'):
-            x = self._max_pool(x, 'pool_3')
+        with tf.variable_scope('conv_3'):
+            x = self._res(x, 64, 128, self._stride_arr(2), 'conv_3_0')
+            x = self._res(x, 128, 128, self._stride_arr(1), 'conv_3_1')
+            x = self._res(x, 128, 128, self._stride_arr(1), 'conv_3_2')
+            x = self._res(x, 128, 128, self._stride_arr(1), 'conv_3_3')
 
-        with tf.variable_scope('fc_1'):
-            x = self._fully_connected('fc_1', x, 512)
-            x = self._batch_norm2('fc_1', x)
+        with tf.variable_scope('unit_last'):
+            x = self._batch_norm('final_bn', x)
             x = self._relu(x)
+            x = self._global_avg_pool(x)
 
         x = slim.dropout(x, self._dropout,
                          is_training=(self.mode == 'train' and self._dropout > 0),
                          scope='dropout1')
-        # with tf.variable_scope('fc_2'):
-        #     x = self._fully_connected('fc_2', x, 384)
-        #     x = self._batch_norm2('fc_2', x)
-        #     x = self._relu(x)
-        # if self.mode == 'train':
-        #     tf.nn.dropout(x, self._dropout)
 
         with tf.variable_scope('logit'):
             logits = self._fully_connected('logit', x, self.hps.num_classes)
@@ -125,7 +104,7 @@ class IslingST(object):
             optimizer = tf.train.AdamOptimizer(self.lrn_rate)
 
         apply_op = optimizer.apply_gradients(
-            list(zip(grads, trainable_variables)),
+            zip(grads, trainable_variables),
             global_step=self.global_step, name='train_step')
 
         train_ops = [apply_op] + self._extra_train_ops
@@ -149,7 +128,7 @@ class IslingST(object):
             tf.summary.histogram('activations', x)
             return x
 
-    def _conv_ReLU(self, name, x, filter_size, in_filters, out_filters, strides):
+    def _conv(self, name, x, filter_size, in_filters, out_filters, strides):
         """Convolution."""
         with tf.variable_scope(name):
             n = in_filters * in_filters * out_filters
@@ -161,10 +140,7 @@ class IslingST(object):
                                 initializer=tf.constant_initializer())
             x = tf.nn.conv2d(x, kernel, strides, padding='SAME')
             x = tf.nn.bias_add(x, b)
-            x = self._batch_norm(name, x)
             tf.summary.histogram('pre_activations', x)
-            x = self._relu(x)
-            tf.summary.histogram('activations', x)
             return x
 
     def _relu(self, x, leakiness=0.0):
@@ -183,6 +159,35 @@ class IslingST(object):
             result = tf.nn.xw_plus_b(x, w, b)
             tf.summary.histogram('fully_connected_result', result)
             return result
+
+    def _res(self, x, in_filters, out_filters, stride, name, share_activation=False):
+        with tf.variable_scope(name):
+            with tf.variable_scope('share_activation'):
+                if share_activation:
+                    x = self._batch_norm('BN_share_activation', x)
+                    x = self._relu(x)
+                    ori_x = x
+                else:
+                    ori_x = x
+                    x = self._batch_norm('BN_share_activation', x)
+                    x = self._relu(x)
+
+            with tf.variable_scope('layer1'):
+                x = self._conv('conv1', x, 3, in_filters, out_filters, stride)
+
+            with tf.variable_scope('layer2'):
+                x = self._batch_norm('BN_layer2', x)
+                x = self._relu(x)
+                x = self._conv('conv2', x, 3, out_filters, out_filters, [1, 1, 1, 1])
+
+            with tf.variable_scope('add'):
+                if in_filters != out_filters:
+                    ori_x = tf.nn.avg_pool(ori_x, stride, stride, 'VALID')
+                    ori_x = tf.pad(
+                        ori_x, [[0, 0], [0, 0], [0, 0],
+                                [(out_filters - in_filters) // 2, (out_filters - in_filters) // 2]])
+                x += ori_x
+            return x
 
     def _max_pool(self, x, name):
         return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME', name=name)
@@ -291,6 +296,10 @@ class IslingST(object):
                 # tf.summary.histogram(var.op.name, var)
 
         return tf.multiply(self.hps.weight_decay_rate, tf.add_n(costs))
+
+    def _global_avg_pool(self, x):
+        assert x.get_shape().ndims == 4
+        return tf.reduce_mean(x, [1, 2])
 
     def _spatial_transformer(self, name, x, in_filters, arr_out_filters):
         width = x.get_shape().as_list()[1]
